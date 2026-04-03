@@ -180,7 +180,10 @@ npm test
 - `av1_nvenc` requires RTX 4000+ series GPU. `av1_amf` requires RX 7000+ series. Falls back to `libsvtav1` (software) if not available — significantly slower.
 
 ### Multi-Source Composite Mode
-- "Composite" mode (multiple sources in one video) is marked "coming soon" in settings. Currently all multi-source recordings produce separate files. This is intentional: separate files per source is more reliable and avoids sync drift.
+- Composite mode canvas-composites all sources in the renderer using `HTMLCanvasElement.captureStream()`.
+- Layout options: **side-by-side** (horizontal row), **stacked** (vertical), **grid** (square tiling), **pip** (first source full, rest as 25%-width overlays).
+- Canvas resolution is derived from the first source's native stream dimensions, so 4K sources stay at full resolution.
+- Audio from all sources is mixed via Web Audio API before being merged into the composite stream.
 
 ### macOS Support
 - The architecture is designed for it (platform adapter abstraction in `src/main/capture/`), but not yet implemented. `setDisplayMediaRequestHandler` behavior differs on macOS — screen recording permission must be granted via System Preferences.
@@ -190,7 +193,7 @@ npm test
 
 ## Roadmap / TODO
 
-- [ ] Composite multi-source mode (side-by-side or PiP layout)
+- [x] Composite multi-source mode (side-by-side, stacked, grid, PiP)
 - [ ] macOS platform adapter (`AVFoundation`/`ScreenCaptureKit`)
 - [ ] Live preview thumbnail during recording
 - [ ] Webcam overlay (picture-in-picture)

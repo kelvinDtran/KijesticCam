@@ -6,6 +6,7 @@ import {
   AudioSettings,
   VideoSettings,
 } from '../../../shared/types'
+import { CompositeRecorder, CompositeLayout } from '../capture/CompositeRecorder'
 
 interface PerSessionRecorder {
   mediaRecorder: MediaRecorder
@@ -15,15 +16,17 @@ interface PerSessionRecorder {
 }
 
 /**
- * useRecording hook manages the renderer-side of the recording pipeline.
+ * useRecording manages the renderer side of the recording pipeline.
  *
- * When main sends RECORDING_SESSION_READY, this hook:
- *  1. Gets the MediaStream for the source via desktopCapturer
- *  2. Mixes audio (system + mic) using Web Audio API
- *  3. Creates a MediaRecorder and starts recording
- *  4. Streams chunks to main via IPC every ~1 second
+ * SEPARATE MODE (default):
+ *   Main sends RECORDING_SESSION_READY for each source.
+ *   Renderer starts one MediaRecorder per source, streams 1s chunks to main.
+ *   Main writes chunks to .webm, then FFmpeg re-encodes on stop.
  *
- * When stop is requested, it stops each MediaRecorder and calls finalizeSession.
+ * COMPOSITE MODE:
+ *   Renderer manages a CompositeRecorder that canvas-composites all sources.
+ *   A single session is created in main. All canvas chunks go to that one session.
+ *   Layout options: side-by-side, stacked, grid, pip.
  */
 export function useRecording() {
   const {
@@ -36,19 +39,17 @@ export function useRecording() {
   } = useAppStore()
 
   const recorders = useRef<Map<string, PerSessionRecorder>>(new Map())
+  const compositeRef = useRef<CompositeRecorder | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
 
-  // Timer to update session durations in UI
+  // Tick session durations while recording
   useEffect(() => {
     if (globalStatus === 'recording') {
       timerRef.current = setInterval(() => updateSessionDuration(), 250)
     } else {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
-    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [globalStatus])
 
   // Subscribe to main-process events
@@ -58,37 +59,29 @@ export function useRecording() {
     })
 
     const offStatus = window.electronAPI.onRecordingStatus((event) => {
-      const session = useAppStore.getState().sessions.get(event.sessionId)
-      if (!session) return
-      setSession({ ...session, status: event.status, progress: event.progress ?? 0 })
-      // If any session is recording, mark global as recording
-      const states = [...useAppStore.getState().sessions.values()].map((s) => s.status)
-      if (states.includes('recording')) setGlobalStatus('recording')
-      else if (states.every((s) => s === 'idle' || s === 'encoding')) {
-        const anyEncoding = states.includes('encoding')
-        setGlobalStatus(anyEncoding ? 'encoding' : 'idle')
+      const current = useAppStore.getState().sessions.get(event.sessionId)
+      if (!current) return
+      setSession({ ...current, status: event.status, progress: event.progress ?? 0 })
+      const statuses = [...useAppStore.getState().sessions.values()].map((s) => s.status)
+      if (statuses.includes('recording')) setGlobalStatus('recording')
+      else if (statuses.every((s) => s === 'idle' || s === 'encoding')) {
+        setGlobalStatus(statuses.includes('encoding') ? 'encoding' : 'idle')
       }
     })
 
     const offComplete = window.electronAPI.onRecordingComplete(({ sessionId }) => {
       removeSession(sessionId)
-      const remaining = [...useAppStore.getState().sessions.values()]
-      if (remaining.length === 0) setGlobalStatus('idle')
+      if (useAppStore.getState().sessions.size === 0) setGlobalStatus('idle')
     })
 
-    const offStop = window.electronAPI.onHotkeyStop(() => stopAll())
-    const offPause = window.electronAPI.onHotkeyPause(() => pauseAll())
-    const offResume = window.electronAPI.onHotkeyResume(() => resumeAll())
+    const offStop    = window.electronAPI.onHotkeyStop(() => stopAll())
+    const offPause   = window.electronAPI.onHotkeyPause(() => pauseAll())
+    const offResume  = window.electronAPI.onHotkeyResume(() => resumeAll())
 
-    return () => {
-      offReady()
-      offStatus()
-      offComplete()
-      offStop()
-      offPause()
-      offResume()
-    }
+    return () => { offReady(); offStatus(); offComplete(); offStop(); offPause(); offResume() }
   }, [])
+
+  // ── SEPARATE MODE: one MediaRecorder per RECORDING_SESSION_READY event ─────
 
   const startCaptureForSession = useCallback(async (payload: StartRecordingPayload) => {
     try {
@@ -96,12 +89,10 @@ export function useRecording() {
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: getSupportedMimeType(),
         videoBitsPerSecond: getVideoBitrate(payload.video),
-        audioBitsPerSecond: 192000,
+        audioBitsPerSecond: 192_000,
       })
 
       const startTime = Date.now()
-
-      // Register in store
       setSession({
         id: payload.sessionId,
         sourceName: payload.sourceName,
@@ -111,21 +102,14 @@ export function useRecording() {
         durationSec: 0,
       })
 
-      const rec: PerSessionRecorder = {
-        mediaRecorder,
-        stream,
-        startTime,
-        durationMs: 0,
-      }
+      const rec: PerSessionRecorder = { mediaRecorder, stream, startTime, durationMs: 0 }
       recorders.current.set(payload.sessionId, rec)
 
-      // Stream chunks to main process
       mediaRecorder.ondataavailable = async (e) => {
         if (e.data.size === 0) return
-        const buffer = await e.data.arrayBuffer()
         window.electronAPI.sendChunk({
           sessionId: payload.sessionId,
-          data: new Uint8Array(buffer),
+          data: new Uint8Array(await e.data.arrayBuffer()),
         })
       }
 
@@ -135,23 +119,114 @@ export function useRecording() {
         r.durationMs = Date.now() - r.startTime
         r.stream.getTracks().forEach((t) => t.stop())
         recorders.current.delete(payload.sessionId)
-
         await window.electronAPI.finalizeSession({
           sessionId: payload.sessionId,
           durationMs: r.durationMs,
         })
       }
 
-      mediaRecorder.start(1000)  // emit chunks every 1 second
+      mediaRecorder.start(1000)
       setGlobalStatus('recording')
     } catch (err) {
       console.error('startCaptureForSession error:', err)
     }
   }, [])
 
+  // ── COMPOSITE MODE: one CompositeRecorder for all sources together ──────────
+
+  const startCompositeCapture = useCallback(async (
+    config: RecordingConfig,
+    sessionId: string
+  ) => {
+    const layout = (config as RecordingConfig & { compositeLayout?: CompositeLayout })
+      .compositeLayout ?? 'side-by-side'
+
+    const compositor = new CompositeRecorder({
+      sources: config.sources,
+      audio: config.audio,
+      video: config.video,
+      layout,
+    })
+
+    compositeRef.current = compositor
+    await compositor.prepare()
+
+    setSession({
+      id: sessionId,
+      sourceName: config.sources.map((s) => s.name).join(' + '),
+      status: 'recording',
+      progress: 0,
+      startTime: Date.now(),
+      durationSec: 0,
+    })
+
+    compositor.start(
+      // onChunk
+      (buffer) => {
+        window.electronAPI.sendChunk({
+          sessionId,
+          data: new Uint8Array(buffer),
+        })
+      },
+      // onStop
+      async (durationMs) => {
+        compositeRef.current = null
+        await window.electronAPI.finalizeSession({ sessionId, durationMs })
+      }
+    )
+
+    setGlobalStatus('recording')
+  }, [])
+
+  // ── Public API ──────────────────────────────────────────────────────────────
+
+  const startRecording = useCallback(async (config: RecordingConfig) => {
+    setGlobalStatus('recording')
+
+    if (config.multiSourceMode === 'composite' && config.sources.length > 1) {
+      // In composite mode: tell main to create ONE session for "composite",
+      // then handle all capture in the renderer via CompositeRecorder.
+      const result = await window.electronAPI.startRecording({
+        ...config,
+        // Override to single "composite" source so coordinator creates one session
+        sources: [{
+          id: 'composite',
+          name: config.sources.map((s) => s.name).join(' + '),
+          type: 'screen',
+        }],
+      })
+      if (!result.ok) {
+        console.error('startRecording failed:', result.error)
+        setGlobalStatus('idle')
+        return
+      }
+      // The RECORDING_SESSION_READY event from main gives us the sessionId.
+      // We intercept it via a one-shot listener here instead of startCaptureForSession.
+      const removeListener = window.electronAPI.onRecordingSessionReady(async (payload) => {
+        removeListener()
+        await startCompositeCapture(config, payload.sessionId)
+      })
+    } else {
+      // Separate mode (default): main creates one session per source
+      const result = await window.electronAPI.startRecording(config)
+      if (!result.ok) {
+        console.error('startRecording failed:', result.error)
+        setGlobalStatus('idle')
+      }
+    }
+  }, [startCompositeCapture])
+
   const stopAll = useCallback(async () => {
     await window.electronAPI.stopRecording()
     setGlobalStatus('stopping')
+
+    // Stop composite recorder if active
+    if (compositeRef.current) {
+      compositeRef.current.stop()
+      return
+    }
+
+    // Stop all per-session recorders
     for (const [, rec] of recorders.current) {
       if (rec.mediaRecorder.state !== 'inactive') {
         rec.mediaRecorder.stop()
@@ -161,107 +236,64 @@ export function useRecording() {
 
   const pauseAll = useCallback(async () => {
     await window.electronAPI.pauseRecording()
+    compositeRef.current?.pause()
     for (const [, rec] of recorders.current) {
-      if (rec.mediaRecorder.state === 'recording') {
-        rec.mediaRecorder.pause()
-      }
+      if (rec.mediaRecorder.state === 'recording') rec.mediaRecorder.pause()
     }
     setGlobalStatus('paused')
   }, [])
 
   const resumeAll = useCallback(async () => {
     await window.electronAPI.resumeRecording()
+    compositeRef.current?.resume()
     for (const [, rec] of recorders.current) {
-      if (rec.mediaRecorder.state === 'paused') {
-        rec.mediaRecorder.resume()
-      }
+      if (rec.mediaRecorder.state === 'paused') rec.mediaRecorder.resume()
     }
     setGlobalStatus('recording')
   }, [])
 
-  const startRecording = useCallback(async (config: RecordingConfig) => {
-    setGlobalStatus('recording')
-    const result = await window.electronAPI.startRecording(config)
-    if (!result.ok) {
-      console.error('startRecording failed:', result.error)
-      setGlobalStatus('idle')
-    }
-  }, [])
-
-  return {
-    globalStatus,
-    sessions,
-    startRecording,
-    stopAll,
-    pauseAll,
-    resumeAll,
-  }
+  return { globalStatus, sessions, startRecording, stopAll, pauseAll, resumeAll }
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function buildCaptureStream(payload: StartRecordingPayload): Promise<MediaStream> {
-  const constraints: MediaStreamConstraints = {
+  // Re-fetch sources to get the current ID for this source name
+  const sources = await window.electronAPI.getSources()
+  const matched = sources.find((s) => s.name === payload.sourceName || s.id === payload.sourceName)
+  const sourceId = matched?.id ?? ''
+
+  const videoStream = await navigator.mediaDevices.getUserMedia({
     video: {
-      // @ts-ignore — Electron-specific constraint
+      // @ts-ignore
       mandatory: {
         chromeMediaSource: 'desktop',
-        chromeMediaSourceId: payload.sourceName,  // source.id is passed via payload
+        chromeMediaSourceId: sourceId,
         minFrameRate: payload.video.frameRate,
         maxFrameRate: payload.video.frameRate,
       },
     },
     audio: false,
-  }
+  })
 
-  // We'll get the source ID from the sources list in the store.
-  // payload.sourceName here is used as a display label; source.id is needed.
-  // The actual source ID is embedded in the StartRecordingPayload's context via
-  // the RecordingConfig → sources list. We use sourceName to look it up.
-  // For a cleaner solution, we pass sourceId directly.
-  const sources = await window.electronAPI.getSources()
-  const matchedSource = sources.find(
-    (s) => s.name === payload.sourceName || s.id === payload.sourceName
-  )
-
-  if (matchedSource) {
-    // @ts-ignore
-    constraints.video = {
-      mandatory: {
-        chromeMediaSource: 'desktop',
-        chromeMediaSourceId: matchedSource.id,
-        minFrameRate: payload.video.frameRate,
-        maxFrameRate: payload.video.frameRate,
-      },
-    }
-  }
-
-  const videoStream = await navigator.mediaDevices.getUserMedia(constraints)
-
-  // Build audio stream
   const audioTracks: MediaStreamTrack[] = []
 
   if (payload.audio.systemAudioEnabled) {
     try {
-      const systemStream = await navigator.mediaDevices.getUserMedia({
+      const sys = await navigator.mediaDevices.getUserMedia({
         audio: {
           // @ts-ignore
-          mandatory: {
-            chromeMediaSource: 'desktop',
-            chromeMediaSourceId: matchedSource?.id ?? '',
-          },
+          mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sourceId },
         },
         video: false,
       })
-      audioTracks.push(...systemStream.getAudioTracks())
-    } catch {
-      // System audio may not be available on some configs
-    }
+      audioTracks.push(...sys.getAudioTracks())
+    } catch { /* loopback audio unavailable for this source */ }
   }
 
   if (payload.audio.microphoneEnabled) {
     try {
-      const micStream = await navigator.mediaDevices.getUserMedia({
+      const mic = await navigator.mediaDevices.getUserMedia({
         audio: {
           deviceId: payload.audio.microphoneDeviceId ?? undefined,
           echoCancellation: false,
@@ -270,65 +302,37 @@ async function buildCaptureStream(payload: StartRecordingPayload): Promise<Media
         },
         video: false,
       })
-      audioTracks.push(...micStream.getAudioTracks())
-    } catch {
-      // Mic not available
-    }
+      audioTracks.push(...mic.getAudioTracks())
+    } catch { /* mic unavailable */ }
   }
 
-  if (audioTracks.length > 0) {
-    // Mix audio with gain nodes
-    const ctx = new AudioContext()
-    const dest = ctx.createMediaStreamDestination()
+  if (audioTracks.length === 0) return videoStream
 
-    const systemGain = payload.audio.systemAudioGain
-    const micGain = payload.audio.microphoneGain
+  const ctx = new AudioContext()
+  const dest = ctx.createMediaStreamDestination()
+  let trackIdx = 0
 
-    let trackIdx = 0
-    if (payload.audio.systemAudioEnabled && audioTracks[trackIdx]) {
-      const src = ctx.createMediaStreamSource(new MediaStream([audioTracks[trackIdx++]]))
-      const gain = ctx.createGain()
-      gain.gain.value = systemGain
-      src.connect(gain)
-      gain.connect(dest)
-    }
-
-    if (payload.audio.microphoneEnabled && audioTracks[trackIdx]) {
-      const src = ctx.createMediaStreamSource(new MediaStream([audioTracks[trackIdx]]))
-      const gain = ctx.createGain()
-      gain.gain.value = micGain
-      src.connect(gain)
-      gain.connect(dest)
-    }
-
-    const combined = new MediaStream([
-      ...videoStream.getVideoTracks(),
-      ...dest.stream.getAudioTracks(),
-    ])
-    return combined
+  if (payload.audio.systemAudioEnabled && audioTracks[trackIdx]) {
+    const gainNode = ctx.createGain()
+    gainNode.gain.value = payload.audio.systemAudioGain
+    ctx.createMediaStreamSource(new MediaStream([audioTracks[trackIdx++]])).connect(gainNode)
+    gainNode.connect(dest)
+  }
+  if (payload.audio.microphoneEnabled && audioTracks[trackIdx]) {
+    const gainNode = ctx.createGain()
+    gainNode.gain.value = payload.audio.microphoneGain
+    ctx.createMediaStreamSource(new MediaStream([audioTracks[trackIdx]])).connect(gainNode)
+    gainNode.connect(dest)
   }
 
-  return videoStream
+  return new MediaStream([...videoStream.getVideoTracks(), ...dest.stream.getAudioTracks()])
 }
 
 function getSupportedMimeType(): string {
-  const candidates = [
-    'video/webm;codecs=vp9,opus',
-    'video/webm;codecs=vp8,opus',
-    'video/webm',
-  ]
-  for (const type of candidates) {
-    if (MediaRecorder.isTypeSupported(type)) return type
-  }
-  return ''
+  const candidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+  return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? ''
 }
 
-/** Estimate target video bitrate based on quality preset and codec settings. */
 function getVideoBitrate(video: VideoSettings): number {
-  const presetBitrates: Record<string, number> = {
-    efficiency: 3_000_000,   // 3 Mbps — sufficient for 1080p screen content at 60fps
-    balanced: 8_000_000,     // 8 Mbps
-    quality: 20_000_000,     // 20 Mbps — near-lossless for 4K
-  }
-  return presetBitrates[video.qualityPreset] ?? 8_000_000
+  return { efficiency: 3_000_000, balanced: 8_000_000, quality: 20_000_000 }[video.qualityPreset] ?? 8_000_000
 }

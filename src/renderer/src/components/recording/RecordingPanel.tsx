@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react'
-import { Circle, Square, Pause, Play, AlertTriangle } from 'lucide-react'
+import { Circle, Square, Pause, Play, AlertTriangle, Layers, SplitSquareHorizontal } from 'lucide-react'
 import { RecordingStatus } from '../../../../shared/types'
 import { useAppStore, ActiveSession } from '../../store/appStore'
 import { useRecording } from '../../hooks/useRecording'
@@ -46,6 +46,7 @@ export function RecordingPanel() {
       outputDir: settings.outputDir,
       countdownSeconds: settings.countdownSeconds,
       multiSourceMode: settings.multiSourceMode,
+      compositeLayout: settings.compositeLayout,
     })
   }, [selectedSources, settings])
 
@@ -81,6 +82,21 @@ export function RecordingPanel() {
           countdownSeconds={settings.countdownSeconds}
           onCountdownComplete={handleCountdownComplete}
         />
+
+        {/* Multi-source mode indicator */}
+        {isIdle && selectedSourceIds.size > 1 && (
+          <div className={[
+            'flex items-center gap-2 text-xs rounded-lg px-3 py-2 border',
+            settings.multiSourceMode === 'composite'
+              ? 'text-[var(--color-accent)] bg-[var(--color-accent-glow)] border-[var(--color-accent)]/30'
+              : 'text-[var(--color-text-muted)] bg-[var(--color-bg-hover)] border-[var(--color-border)]',
+          ].join(' ')}>
+            {settings.multiSourceMode === 'composite'
+              ? <><Layers size={12} /> Composite mode · {settings.compositeLayout} layout · 1 output file</>
+              : <><SplitSquareHorizontal size={12} /> Separate files mode · {selectedSourceIds.size} output files</>
+            }
+          </div>
+        )}
 
         {/* No source warning */}
         {isIdle && selectedSourceIds.size === 0 && (

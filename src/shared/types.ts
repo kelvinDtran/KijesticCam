@@ -40,6 +40,8 @@ export interface VideoSettings {
   hardwareAcceleration: boolean
 }
 
+export type CompositeLayout = 'side-by-side' | 'grid' | 'pip' | 'stacked'
+
 export interface RecordingConfig {
   sources: CaptureSource[]
   audio: AudioSettings
@@ -47,6 +49,7 @@ export interface RecordingConfig {
   outputDir: string
   countdownSeconds: number
   multiSourceMode: 'separate' | 'composite'
+  compositeLayout?: CompositeLayout
 }
 
 export interface RecordingSession {
@@ -95,6 +98,7 @@ export interface AppSettings {
   countdownSeconds: number
   hotkeys: HotkeySettings
   multiSourceMode: 'separate' | 'composite'
+  compositeLayout: CompositeLayout
   minimizeToTray: boolean
   showCapturePreview: boolean
 }
@@ -125,6 +129,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     pauseResume: 'CommandOrControl+Shift+P',
   },
   multiSourceMode: 'separate',
+  compositeLayout: 'side-by-side',
   minimizeToTray: true,
   showCapturePreview: true,
 }

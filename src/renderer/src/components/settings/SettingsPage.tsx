@@ -140,19 +140,44 @@ export function SettingsPage() {
               </select>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[var(--color-text-primary)]">Multi-source mode</p>
-                <p className="text-xs text-[var(--color-text-muted)]">How to handle multiple sources</p>
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-[var(--color-text-primary)]">Multi-source mode</p>
+                  <p className="text-xs text-[var(--color-text-muted)]">How to handle multiple sources</p>
+                </div>
+                <select
+                  value={settings.multiSourceMode}
+                  onChange={(e) => handleSave({ multiSourceMode: e.target.value as 'separate' | 'composite' })}
+                  className="no-drag bg-[var(--color-bg-hover)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)]"
+                >
+                  <option value="separate">Separate files</option>
+                  <option value="composite">Composite — one file</option>
+                </select>
               </div>
-              <select
-                value={settings.multiSourceMode}
-                onChange={(e) => handleSave({ multiSourceMode: e.target.value as 'separate' | 'composite' })}
-                className="no-drag bg-[var(--color-bg-hover)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)]"
-              >
-                <option value="separate">Separate files</option>
-                <option value="composite">Composite (coming soon)</option>
-              </select>
+
+              {settings.multiSourceMode === 'composite' && (
+                <div className="flex flex-col gap-2 pl-2 border-l-2 border-[var(--color-accent)]/30">
+                  <p className="text-xs text-[var(--color-text-secondary)]">Composite layout</p>
+                  <SegmentedControl
+                    options={[
+                      { value: 'side-by-side', label: 'Side by side' },
+                      { value: 'stacked', label: 'Stacked' },
+                      { value: 'grid', label: 'Grid' },
+                      { value: 'pip', label: 'PiP' },
+                    ]}
+                    value={settings.compositeLayout ?? 'side-by-side'}
+                    onChange={(v) => handleSave({ compositeLayout: v as import('../../../../shared/types').CompositeLayout })}
+                  />
+                  <p className="text-[10px] text-[var(--color-text-muted)]">
+                    {settings.compositeLayout === 'side-by-side' && 'All sources in a horizontal row. Best for 2 displays.'}
+                    {settings.compositeLayout === 'stacked' && 'All sources stacked vertically.'}
+                    {settings.compositeLayout === 'grid' && 'Square grid — best for 3–4 sources.'}
+                    {settings.compositeLayout === 'pip' && 'First source full-screen, others as small overlays in bottom-right.'}
+                    {!settings.compositeLayout && 'All sources in a horizontal row.'}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between">
