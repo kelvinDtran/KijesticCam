@@ -68,8 +68,17 @@ export class HardwareDetector {
       const { stdout } = await execFileAsync('wmic', [
         'path', 'win32_VideoController', 'get', 'name', '/format:value'
       ], { timeout: 5000 })
-      const match = stdout.match(/Name=(.+)/i)
-      return match ? match[1].trim() : null
+      // Collect all GPU names — WMIC emits one "Name=..." line per adapter
+      const names = [...stdout.matchAll(/Name=(.+)/gi)]
+        .map((m) => m[1].trim())
+        .filter(Boolean)
+      // Prefer discrete GPU: NVIDIA first, then AMD, then whatever is present
+      return (
+        names.find((n) => /nvidia/i.test(n)) ??
+        names.find((n) => /amd|radeon/i.test(n)) ??
+        names[0] ??
+        null
+      )
     } catch {
       return null
     }

@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react'
-import { Circle, Square, Pause, Play, AlertTriangle, Layers, SplitSquareHorizontal } from 'lucide-react'
+import { Circle, Square, Pause, Play, AlertTriangle, Layers, SquareSplitHorizontal } from 'lucide-react'
 import { RecordingStatus } from '../../../../shared/types'
 import { useAppStore, ActiveSession } from '../../store/appStore'
 import { useRecording } from '../../hooks/useRecording'
@@ -93,7 +93,7 @@ export function RecordingPanel() {
           ].join(' ')}>
             {settings.multiSourceMode === 'composite'
               ? <><Layers size={12} /> Composite mode · {settings.compositeLayout} layout · 1 output file</>
-              : <><SplitSquareHorizontal size={12} /> Separate files mode · {selectedSourceIds.size} output files</>
+              : <><SquareSplitHorizontal size={12} /> Separate files mode · {selectedSourceIds.size} output files</>
             }
           </div>
         )}

@@ -1,6 +1,27 @@
 @import "tailwindcss";
 
+/* Register tokens with Tailwind v4 for utility generation */
 @theme {
+  --color-bg-primary: #0f0f14;
+  --color-bg-secondary: #16161e;
+  --color-bg-card: #1c1c27;
+  --color-bg-hover: #22222f;
+  --color-border: #2a2a3a;
+  --color-accent: #7c6af7;
+  --color-accent-dim: #5b51c4;
+  --color-accent-glow: rgba(124, 106, 247, 0.15);
+  --color-rec: #f43f5e;
+  --color-rec-dim: #be123c;
+  --color-text-primary: #e8e8f0;
+  --color-text-secondary: #8888a8;
+  --color-text-muted: #55556a;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+}
+
+/* Explicit :root declaration guarantees var() resolves in all Electron/Vite
+   dev-mode scenarios regardless of @theme processing order or CSP. */
+:root {
   --color-bg-primary: #0f0f14;
   --color-bg-secondary: #16161e;
   --color-bg-card: #1c1c27;
