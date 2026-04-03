@@ -22,6 +22,10 @@ const api = {
   getSources: (): Promise<CaptureSource[]> =>
     ipcRenderer.invoke(IPC.GET_SOURCES),
 
+  /** Tell main which source ID to use for the next getDisplayMedia() call. */
+  setCaptureSource: (sourceId: string): Promise<void> =>
+    ipcRenderer.invoke('capture:set-source', sourceId),
+
   // ── Recording ────────────────────────────────────────────────────────────
   startRecording: (config: RecordingConfig): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.RECORDING_START, config),

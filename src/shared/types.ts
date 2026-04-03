@@ -193,6 +193,7 @@ export interface HardwareInfo {
 
 export interface StartRecordingPayload {
   sessionId: string
+  sourceId: string
   sourceName: string
   sourceType: CaptureSourceType
   outputFileName: string

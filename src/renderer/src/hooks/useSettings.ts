@@ -2,7 +2,10 @@ import { useEffect } from 'react'
 import { useAppStore } from '../store/appStore'
 
 export function useSettings() {
-  const { settings, setSettings, setLoadingSettings, setHardware } = useAppStore()
+  const settings = useAppStore((s) => s.settings)
+  const setSettings = useAppStore((s) => s.setSettings)
+  const setLoadingSettings = useAppStore((s) => s.setLoadingSettings)
+  const setHardware = useAppStore((s) => s.setHardware)
 
   useEffect(() => {
     async function load() {

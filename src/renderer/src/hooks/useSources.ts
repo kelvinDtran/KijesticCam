@@ -2,17 +2,15 @@ import { useEffect, useCallback } from 'react'
 import { useAppStore } from '../store/appStore'
 
 export function useSources() {
-  const {
-    sources,
-    selectedSourceIds,
-    loadingSources,
-    audioInputDevices,
-    setSources,
-    setLoadingSources,
-    setAudioInputDevices,
-    toggleSource,
-    setSelectedSources,
-  } = useAppStore()
+  const sources = useAppStore((s) => s.sources)
+  const selectedSourceIds = useAppStore((s) => s.selectedSourceIds)
+  const loadingSources = useAppStore((s) => s.loadingSources)
+  const audioInputDevices = useAppStore((s) => s.audioInputDevices)
+  const setSources = useAppStore((s) => s.setSources)
+  const setLoadingSources = useAppStore((s) => s.setLoadingSources)
+  const setAudioInputDevices = useAppStore((s) => s.setAudioInputDevices)
+  const toggleSource = useAppStore((s) => s.toggleSource)
+  const setSelectedSources = useAppStore((s) => s.setSelectedSources)
 
   const refreshSources = useCallback(async () => {
     setLoadingSources(true)

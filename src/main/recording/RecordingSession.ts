@@ -76,6 +76,7 @@ export class RecordingSession {
 
     return {
       sessionId: this.id,
+      sourceId: this.source.id,
       sourceName: this.source.name,
       sourceType: this.source.type,
       outputFileName: this.outputFileName,

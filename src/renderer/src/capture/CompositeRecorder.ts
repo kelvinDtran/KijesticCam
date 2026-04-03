@@ -132,6 +132,11 @@ export class CompositeRecorder {
     return this.startTime ? Date.now() - this.startTime : 0
   }
 
+  /** Returns a live preview stream from the composite canvas, or null before start(). */
+  getPreviewStream(): MediaStream | null {
+    return this.canvas ? this.canvas.captureStream(this.video.frameRate) : null
+  }
+
   // ── Private helpers ─────────────────────────────────────────────────────────
 
   private async captureSource(source: CaptureSource): Promise<SourceCapture> {

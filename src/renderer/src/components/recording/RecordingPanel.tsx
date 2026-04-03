@@ -7,16 +7,15 @@ import { useSources } from '../../hooks/useSources'
 import { SourcePicker } from './SourcePicker'
 import { AudioControls } from './AudioControls'
 import { RecordingTimer } from './RecordingTimer'
+import { RecordingPreview } from './RecordingPreview'
 import { Button } from '../common/Button'
 
 export function RecordingPanel() {
-  const { settings, setSettings, setGlobalStatus } = useAppStore((s) => ({
-    settings: s.settings,
-    setSettings: s.setSettings,
-    setGlobalStatus: s.setGlobalStatus,
-  }))
+  const settings = useAppStore((s) => s.settings)
+  const setSettings = useAppStore((s) => s.setSettings)
+  const setGlobalStatus = useAppStore((s) => s.setGlobalStatus)
 
-  const { globalStatus, sessions, startRecording, stopAll, pauseAll, resumeAll } = useRecording()
+  const { globalStatus, sessions, previewStreams, startRecording, stopAll, stopSession, pauseAll, resumeAll } = useRecording()
 
   const {
     sources,
@@ -57,53 +56,61 @@ export function RecordingPanel() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-5">
-        {/* Source picker */}
-        <SourcePicker
-          sources={sources}
-          selectedIds={selectedSourceIds}
-          loading={loadingSources}
-          disabled={!isIdle}
-          onToggle={toggleSource}
-          onRefresh={refreshSources}
-        />
+        {isRecording || isPaused ? (
+          /* ── Active recording: show live preview ── */
+          <RecordingPreview
+            previewStreams={previewStreams}
+            sessions={sessions}
+            isPaused={isPaused}
+            onStopSession={stopSession}
+          />
+        ) : (
+          /* ── Idle / countdown / stopping / encoding ── */
+          <>
+            <SourcePicker
+              sources={sources}
+              selectedIds={selectedSourceIds}
+              loading={loadingSources}
+              disabled={!isIdle}
+              onToggle={toggleSource}
+              onRefresh={refreshSources}
+            />
 
-        {/* Audio controls */}
-        <AudioControls
-          audio={settings.audio}
-          audioInputDevices={audioInputDevices}
-          disabled={!isIdle}
-          onChange={(partial) => setSettings({ audio: { ...settings.audio, ...partial } })}
-        />
+            <AudioControls
+              audio={settings.audio}
+              audioInputDevices={audioInputDevices}
+              disabled={!isIdle}
+              onChange={(partial) => setSettings({ audio: { ...settings.audio, ...partial } })}
+            />
 
-        {/* Timer / status display */}
-        <RecordingTimer
-          status={globalStatus}
-          sessions={sessions}
-          countdownSeconds={settings.countdownSeconds}
-          onCountdownComplete={handleCountdownComplete}
-        />
+            <RecordingTimer
+              status={globalStatus}
+              sessions={sessions}
+              countdownSeconds={settings.countdownSeconds}
+              onCountdownComplete={handleCountdownComplete}
+            />
 
-        {/* Multi-source mode indicator */}
-        {isIdle && selectedSourceIds.size > 1 && (
-          <div className={[
-            'flex items-center gap-2 text-xs rounded-lg px-3 py-2 border',
-            settings.multiSourceMode === 'composite'
-              ? 'text-[var(--color-accent)] bg-[var(--color-accent-glow)] border-[var(--color-accent)]/30'
-              : 'text-[var(--color-text-muted)] bg-[var(--color-bg-hover)] border-[var(--color-border)]',
-          ].join(' ')}>
-            {settings.multiSourceMode === 'composite'
-              ? <><Layers size={12} /> Composite mode · {settings.compositeLayout} layout · 1 output file</>
-              : <><SquareSplitHorizontal size={12} /> Separate files mode · {selectedSourceIds.size} output files</>
-            }
-          </div>
-        )}
+            {isIdle && selectedSourceIds.size > 1 && (
+              <div className={[
+                'flex items-center gap-2 text-xs rounded-lg px-3 py-2 border',
+                settings.multiSourceMode === 'composite'
+                  ? 'text-[var(--color-accent)] bg-[var(--color-accent-glow)] border-[var(--color-accent)]/30'
+                  : 'text-[var(--color-text-muted)] bg-[var(--color-bg-hover)] border-[var(--color-border)]',
+              ].join(' ')}>
+                {settings.multiSourceMode === 'composite'
+                  ? <><Layers size={12} /> Composite mode · {settings.compositeLayout} layout · 1 output file</>
+                  : <><SquareSplitHorizontal size={12} /> Separate files mode · {selectedSourceIds.size} output files</>
+                }
+              </div>
+            )}
 
-        {/* No source warning */}
-        {isIdle && selectedSourceIds.size === 0 && (
-          <div className="flex items-center gap-2 text-xs text-[var(--color-warning)] bg-yellow-500/10 rounded-lg px-3 py-2">
-            <AlertTriangle size={12} />
-            Select at least one source to start recording
-          </div>
+            {isIdle && selectedSourceIds.size === 0 && (
+              <div className="flex items-center gap-2 text-xs text-[var(--color-warning)] bg-yellow-500/10 rounded-lg px-3 py-2">
+                <AlertTriangle size={12} />
+                Select at least one source to start recording
+              </div>
+            )}
+          </>
         )}
       </div>
 

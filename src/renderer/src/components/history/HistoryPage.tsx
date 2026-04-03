@@ -5,7 +5,11 @@ import { useAppStore } from '../../store/appStore'
 import { Button } from '../common/Button'
 
 export function HistoryPage() {
-  const { history, setHistory, setLoadingHistory, loadingHistory, removeHistoryEntry } = useAppStore()
+  const history = useAppStore((s) => s.history)
+  const loadingHistory = useAppStore((s) => s.loadingHistory)
+  const setHistory = useAppStore((s) => s.setHistory)
+  const setLoadingHistory = useAppStore((s) => s.setLoadingHistory)
+  const removeHistoryEntry = useAppStore((s) => s.removeHistoryEntry)
 
   useEffect(() => {
     async function load() {

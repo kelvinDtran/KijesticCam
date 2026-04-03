@@ -11,7 +11,8 @@ const navItems: { page: Page; label: string; icon: React.ReactNode }[] = [
 ]
 
 export function Sidebar() {
-  const { activePage, setActivePage } = useAppStore()
+  const activePage = useAppStore((s) => s.activePage)
+  const setActivePage = useAppStore((s) => s.setActivePage)
 
   return (
     <nav className="flex flex-col items-center w-14 py-3 bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)] gap-1 flex-shrink-0">
