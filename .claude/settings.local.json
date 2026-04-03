@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C C:UsersKelvinKijesticCamSoftware log --oneline -5)",
+      "Bash(git -C /c/Users/Kelvin/KijesticCamSoftware log --oneline -5)",
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(npm test:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
