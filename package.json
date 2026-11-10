@@ -49,43 +49,5 @@
     "ts-jest": "^29.3.1",
     "typescript": "^5.8.3",
     "zustand": "^5.0.3"
-  },
-  "build": {
-    "appId": "com.kijjestic.cam",
-    "productName": "KijesticCam",
-    "directories": {
-      "buildResources": "build",
-      "output": "dist"
-    },
-    "files": [
-      "out/**/*",
-      "!out/**/*.map"
-    ],
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "build/icon.ico"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    },
-    "extraResources": [
-      {
-        "from": "node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe",
-        "to": "ffmpeg/ffmpeg.exe",
-        "filter": [
-          "**/*"
-        ]
-      }
-    ]
   }
 }
