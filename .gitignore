@@ -3,3 +3,6 @@ out/
 dist/
 *.log
 .env
+
+# Local assistant settings
+.claude/

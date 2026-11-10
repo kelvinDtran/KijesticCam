@@ -1,0 +1,25 @@
+appId: com.kijjestic.cam
+productName: KijesticCam
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**/*
+  - resources/tray-icon.png
+  - "!out/**/*.map"
+extraResources:
+  - from: node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe
+    to: ffmpeg/ffmpeg.exe
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: KijesticCam-Setup-${version}.${ext}
+  # No code-signing certificate is configured: the installer is unsigned.
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+publish: null
